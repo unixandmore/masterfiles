@@ -22,7 +22,6 @@ bundle agent create_users(index,gecos,uid,grp,home,shell,status,key,keyserver)
 
 vars:
   "local_cache"       string => "/var/cfengine/cache/ssh_cache";
-  "authorized_source" string => "/export/admin/build/all/ssh_keys";
 
 
 classes:
@@ -36,19 +35,14 @@ classes:
 commands:
   linux::
     "/usr/sbin/useradd"
-        args    => "-u $(uid) -g $(uid) -o -s '/bin/ksh93' -c '$(gecos)' $(index)",
+        args    => "-u $(uid) -g $(uid) -o  -c '$(gecos)' $(index)",
         contain => standard,
         ifvarclass => "add_$(index)";
 
     "/bin/echo"
-        args    => "$(index):denver1 | /usr/sbin/chpasswd",
+        args    => "$(index):inth3mud | /usr/sbin/chpasswd",
         contain => standard,
         ifvarclass => "add_$(index)";
-
-#   "/usr/bin/chage"
-#        args    => "-M 0  $(index)",
-#        contain => standard,
-#        ifvarclass => "add_$(index)&govzilla1";
 
    "/usr/sbin/groupadd"
         args    => "-g $(uid) -o $(index)",
@@ -62,7 +56,7 @@ commands:
         ifvarclass => "add_$(index)";
 
     "/usr/bin/echo"
-        args    => "$(index):denver1 | /usr/bin/chpasswd",
+        args    => "$(index):inth3mud | /usr/bin/chpasswd",
         contain => standard,
         ifvarclass => "add_$(index)";
 
@@ -86,14 +80,6 @@ files:
          copy_from => remote_cp("$(authorized_source)","$(keyserver)"),
       depth_search => recurse("inf");
             #action => if_elapsed("60");
-
-    linux::
-
-    "$(home)"
-
-          comment  => "Keep the permissions on the home directories up to date",
-            perms  => og("$(index)","$(index)"),
-      depth_search => homedir_recurse("inf");
 
     aix::
 
@@ -228,7 +214,7 @@ files:
 
   any::
     "/usr/local/bin/cfpasswd"
-          handle  =>  "copy_cfpasswd",
+          handle  =>  "agent_aix_pwds_files_any_cfpasswd",
          comment  =>  "Make sure a local copy of cfpasswd is available for this promise",
            perms  =>  mog("0700","root","$(g.zerogroup)"),
        copy_from  =>  remote_cp("/var/cfengine/cache/cfpasswd", "$(system)"),
