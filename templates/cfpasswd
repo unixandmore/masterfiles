@@ -1,0 +1,9 @@
+#!/usr/bin/perl 
+
+$_user = $ARGV[0];
+
+($account, $passwd, $uid, $gid, $quota, $comment, $gcos, $home, $shell) = getpwnam($_user);
+
+print "$passwd";
+
+
