@@ -1,0 +1,84 @@
+bundle agent tripwire
+{
+
+vars:
+
+  "etc_watch_files"     slist   => {
+                                        "/etc/passwd",
+                                        "/etc/group",
+                                        "/etc/security/failedlogin",
+                                        "/etc/security/passwd",
+                                        "/etc/security/limits",
+                                   };
+
+  "run_watch_files"     slist   => {
+                                        "/page/sys1/[a-zA-Z]{2}/.*run$",
+                                   };
+
+  "watch_dirs"          slist   => {
+                                        "/usr/bin",
+                                        "/usr/local/bin",
+                                        "/met/sy",
+                                        "/met/metbin",
+                                        "/met/metbin[0-9]$",
+                                   };
+
+
+files:
+
+ "$(etc_watch_files)"
+
+    comment             => "Change detection on the etc directory",
+    changes             => lay_a_tripwire,
+    classes             => if_repaired("checksum_updated");
+    #action              => if_elapsed("360");
+
+ "$(run_watch_files)"
+
+    comment             => "Change detection on .run files",
+    changes             => lay_a_tripwire,
+    classes             => if_repaired("checksum_updated"),
+    perms               => og("root","page");
+    #depth_search       => recurse("inf"),
+    #action              => if_elapsed("360");
+
+ "$(watch_dirs)"
+    
+    comment             => "Change detection on the specified directories",
+    pathtype            => "literal",
+    depth_search        => recurse("inf"),
+    classes             => if_repaired("checksum_updated"),
+    file_select         => met_exclude_files,
+    changes             => lay_a_tripwire;
+    #action              => if_elapsed("360");
+
+#reports:
+#
+#  checksum_updated::
+#
+#       "File $(this.promiser) changed!! Updated checksum in database!";
+}
+
+body changes lay_a_tripwire
+
+{
+hash           => "md5";
+report_changes => "content";
+update_hashes  => "yes";
+}
+
+body file_select met_exclude_files
+{
+leaf_name => {
+             ".*\.pic",
+             ".*\.dbd",
+             ".*\.dbk",
+             "syserr\.log.*",
+             "abw\.rnd",
+             ".*\.tdb",
+             "log\.nmbd",
+             };
+
+file_result => "!leaf_name";
+}
+
