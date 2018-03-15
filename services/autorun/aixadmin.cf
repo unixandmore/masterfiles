@@ -1,0 +1,375 @@
+bundle agent aixadmin_users_groups
+{
+meta:
+ "tags" slist => { "autorun", };
+
+vars:
+ aix::
+  "aixadmin_groups" data => parsejson('
+  {
+   "aixadmin": { "gid": 1000 },
+  }, meta => { "glidm", "aixadmingroups" }, policy => "free";
+  
+  "aixadmin_users" data => parsejson('
+  {
+   "rcox": { "uid": "1000", "gecos": "Administrative account for Raymond Cox", "home": "/home/rcox", "pgrp": "aixadmin", "grps": ["aixadmin"] },
+  }, meta => { "ulidm", "aixadminusers" }, policy => "free";
+
+ 
+ "groups" slist => variablesmatching(".*","aixadmingroups");
+ "users"  slist => variablesmatching(".*","aixadminusers");
+
+methods:
+ aix::
+  "lidm_groups" usebundle => lidm_groups("@(groups)");
+  "lidm_users"  usebundle => lidm_users("@(users)");
+}
+
+#=======================================================================
+# agent lidm
+# -------------
+#   Searches for any variables that have a meta tag of ulidm or glidm and merge them into 
+#   two local variables containing a list of users and groups to create on the server.
+#   --------------------------------------------------------------------
+#   Expects JSON data variables with meta tags of ulidm (Users) and glidm (Groups)
+#   These entries are designed to reside in the application definitions. 
+#   For example the rms bundle has all users required to make that application work.
+#   --------------------------------------------------------------------
+#   Calls two methods:
+#      _ga: group add
+#      _ua: user add
+#-----------------------------------------------------------------------
+
+bundle agent lidm_groups(grouplist)
+{
+vars:
+ aix::
+  "groups" data => parsejson('[]'), policy => "free";
+  "groups" data => mergedata(groups, $(grouplist)), policy => "free";
+  "gidx"  slist => getindices("groups");
+  
+classes:
+ aix::
+  "add_$(gidx)" not => groupexists("$(gidx)");
+  "$(gidx)_exists" expression => groupexists("$(gidx)");
+
+commands:
+ aix::
+  "/usr/bin/mkgroup"  args => "id = $(gidx) $(groups[$(gidx)][gid])", ifvarclass => "add_$(gidx)";
+}
+
+bundle agent lidm_ua(userlist)
+{
+vars:
+  "users" data => parsejson('[]'), policy => "free";
+  "users" data => mergedata(users, $(userlist)), policy => "free";
+  "uidx"    slist => getindices("users");
+  "policy" string => "present";
+  "no"        int => getfields("$(uidx):.*","/etc/shadow",":","shadowdata");
+  "lidm_users" string => "$(sys.workdir)/inputs/templates/lidm_users";
+  "testinfra_users" string => "/tmp/tests/user_tests.py";
+
+
+classes:
+  "exp_invalid"                               not => regcmp("$(shadowdata[5])","365");
+  "$(uidx)_in_$(users[$(uidx)][grps])" expression => returnszero("/usr/sbin/groupmems -g $(users[$(uidx)][grps]) -l | /bin/grep --silent $(uidx)","useshell");
+
+files:
+  "$(users[$(uidx)][home])/." perms => og("$(uidx)","$(users[$(uidx)][pgrp])"),
+                             create => "true",
+                       depth_search => recurse_with_base("inf");
+
+ DOCKER::
+ "$(testinfra_users)" create => "true",
+             template_method => "mustache",
+               edit_template => "$(lidm_users)";
+
+
+users:
+  "$(uidx)"
+             policy => "$(policy)",
+           home_dir => "$(users[$(uidx)][home])",
+      group_primary => "$(users[$(uidx)][pgrp])",
+        description => "$(users[$(uidx)][gecos])",
+              shell => "$(users[$(uidx)][shell])",
+                uid => "$(users[$(uidx)][uid])";
+
+commands:
+  "/usr/sbin/groupmems" args => "-g $(users[$(uidx)][grps]) -a $(uidx)", contain => silent, ifvarclass => "!$(uidx)_in_$(users[$(uidx)][grps])"; 
+
+ exp_invalid::
+  "/usr/bin/chage"      args => " -M 365 $(uidx)";
+
+
+reports:
+ inform_mode::
+  "Bundle $(this.bundle): $(uidx),$(users[$(uidx)][uid]),$(users[$(uidx)][gecos]),$(users[$(uidx)][home]),$(users[$(uidx)][pgrp]),$(users[$(uidx)][shell])";
+
+
+}
+
+bundle agent create_users(index,gecos,uid,grp,home,shell,status,key,keyserver)
+{
+
+vars:
+  "local_cache"       string => "/var/cfengine/cache/ssh_cache";
+
+
+classes:
+  "valid_user" expression => strcmp("true","$(status)");
+  "add_$(grp)" not => groupexists("$(grp)");
+  "mod_$(index)" not => groupexists("$(index)");
+  "add_$(index)" not => userexists("$(index)");
+  "key" expression => strcmp("true","$(key)");
+  "key_exists"  expression      => fileexists("$(local_cache)/$(index).authorized_keys");
+
+commands:
+  linux::
+    "/usr/sbin/useradd"
+        args    => "-u $(uid) -g $(uid) -o  -c '$(gecos)' $(index)",
+        contain => standard,
+        ifvarclass => "add_$(index)";
+
+    "/bin/echo"
+        args    => "$(index):inth3mud | /usr/sbin/chpasswd",
+        contain => standard,
+        ifvarclass => "add_$(index)";
+
+   "/usr/sbin/groupadd"
+        args    => "-g $(uid) -o $(index)",
+        contain => standard,
+        ifvarclass => "mod_$(index)";
+
+  aix::
+    "/usr/bin/mkuser"
+        args     => "-a id=$(uid) pgrp=$(grp) groups=$(grp),staff gecos=\'$(gecos)\' home=$(home)  $(index)",
+        contain  => standard,
+        ifvarclass => "add_$(index)";
+
+    "/usr/bin/echo"
+        args    => "$(index):inth3mud | /usr/bin/chpasswd",
+        contain => standard,
+        ifvarclass => "add_$(index)";
+
+    "/usr/bin/pwdadm"
+        args    => "-c $(index)",
+        contain => standard,
+        ifvarclass => "add_$(index)";
+
+   "/usr/bin/mkgroup"
+       args     => "aixadmin",
+       contain  => standard,
+    ifvarclass  => "add_aixadmin";
+
+files:
+
+
+     "$(local_cache)"
+
+           comment => "Copy public keys from a an authorized cache into a cache on localhost",
+             perms => mo("600","root"),
+         copy_from => remote_cp("$(authorized_source)","$(keyserver)"),
+      depth_search => recurse("inf");
+            #action => if_elapsed("60");
+
+    aix::
+
+    "$(home)"
+
+          comment  => "Keep the permissions on the home directories up to date",
+            perms  => og("$(index)","$(grp)"),
+      depth_search => homedir_recurse("inf");
+
+    key_exists&linux::
+
+     "$(home)/.ssh/authorized_keys"
+
+           comment => "Edit the authorized keys into the user's personal keyring",
+           create  => "true",
+             perms => mog("600","$(index)","$(index)"),
+         edit_line => insert_file_if_no_line_matching_user("$(index)","$(local_cache)/$(index).authorized_keys"),
+            #action => if_elapsed("60"),
+        ifvarclass => "key";
+
+    key_exists&aix::
+
+     "$(home)/.ssh/authorized_keys"
+
+           comment => "Edit the authorized keys into the user's personal keyring",
+           create  => "true",
+             perms => mog("600","$(index)","$(grp)"),
+         edit_line => insert_file_if_no_line_matching_user("$(index)","$(local_cache)/$(index).authorized_keys"),
+            #action => if_elapsed("60"),
+        ifvarclass => "key";
+
+}
+
+# Update passwords in /etc/shadow. For this to work, a shadow-formatted
+# file for servers and workstations must exist on the cfengine master server
+#
+# This file is copied locally to /var/cfengine/cache/cfshadow, then
+# it is read into an array and /etc/shadow is updated accordingly.
+
+
+# Add new admins to the admin_users slist in the bundle edit_line section
+
+bundle agent linux_pwds(system,users) {
+
+vars:
+  linux::
+    "pwserver" string => execresult("/bin/echo $(system)| /bin/awk 'BEGIN { FS = \".\" }{ print $1}'","useshell");
+
+classes:
+  linux::
+    "pwserver" or => { "$(pwserver)", };
+
+files:
+
+# Copy in a shadow-formatted file with local users
+# you want to update here
+  pwserver::
+    "/var/cfengine/cache/cfshadow"
+
+          perms => mog("0440","root","root"),
+      copy_from => local_cp("/etc/shadow");
+
+  linux::
+    "/var/cfengine/cache/cfshadow"
+           perms => mog("0440","root","root"),
+       copy_from => remote_cp("/var/cfengine/cache/cfshadow", "govzilla1.gov.dnvr"),
+      ifvarclass => "!pwserver";
+
+# Edit the shadow file!
+  linux::
+    "/etc/shadow"
+         comment => "Updating passwords in /etc/shadow",
+       edit_line => set_shadow("$(users)"),
+      ifvarclass => "!pwserver";
+
+}
+
+##########################################################################
+
+bundle edit_line set_shadow(x) {
+
+vars:
+  linux::
+
+  "u" slist => { "@($(x))" };
+
+    # This slurps our source file into an array
+
+          "myshadow" int => readstringarray("myshadow_array","/var/cfengine/cache/cfshadow","#[^\n]*",":",200,10000);
+    "shadow_users" slist => getindices("myshadow_array"),
+                  policy => "overridable";
+
+
+
+field_edits:
+  linux::
+
+    "$(u):.*"
+        edit_field => col(":","2","$(myshadow_array[$(u)][1])","set");
+}
+
+bundle agent aix_pwds(system,users)
+{
+
+vars:
+  aix::
+    "pwserver" string => execresult("/bin/echo $(system)| /bin/awk 'BEGIN { FS = \".\" }{ print $1}'","useshell");
+
+classes:
+  aix::
+    "pwserver" or => { "$(pwserver)", };
+
+files:
+  pwserver::
+
+    "/var/cfengine/cache/cfsec_shadow"
+            handle  => "mock_shadow_file",
+           comment  => "Generate a mock shadow file from /etc/security/passwd",
+     edit_defaults  => empty,
+            create  => "true",
+         edit_line  => insert;
+
+
+  aix::
+    "/var/cfengine/cache/cfsec_shadow"
+         handle  =>  "download_mock_shadow_file",
+        comment  =>  "Copy the mock shadow file from a central password server",
+          perms  =>  mog("0440","root","system"),
+      copy_from  =>  remote_cp("/var/cfengine/cache/cfsec_shadow", "$(system)"),
+     ifvarclass  =>  "!$(pwserver)";
+
+
+  any::
+    "/usr/local/bin/cfpasswd"
+          handle  =>  "agent_aix_pwds_files_any_cfpasswd",
+         comment  =>  "Make sure a local copy of cfpasswd is available for this promise",
+           perms  =>  mog("0700","root","$(g.zerogroup)"),
+       copy_from  =>  remote_cp("/var/cfengine/cache/cfpasswd", "$(system)"),
+      ifvarclass  =>  "!$(pwserver)";
+
+methods:
+  aix::
+
+
+    "update_admin_pass"  usebundle  => passlist,
+    ifvarclass   =>  "!$(pwserver)";
+}
+
+bundle edit_line insert
+{
+vars:
+
+  aix::
+                    "admin_users"  slist => { "@($(users))" };
+    "admin_pass[$(admin_users)]"  string => execresult("/usr/local/bin/cfpasswd $(admin_users)","useshell");
+
+insert_lines:
+
+  aix::
+
+    "$(admin_users):$(admin_pass[$(admin_users)]):";
+}
+
+##########################################################################
+
+
+bundle agent passlist
+{
+
+vars:
+  aix::
+          "mypasswd" int => readstringarray("mypasswd_array","/var/cfengine/cache/cfsec_shadow","#[^\n]*",":",200,10000);
+    "shadow_users" slist => getindices("mypasswd_array"),
+                  policy => "overridable";
+
+methods:
+
+  aix::
+    "check_update"  usebundle  =>  check_update("$(mypasswd_array[$(shadow_users)][0])","$(mypasswd_array[$(shadow_users)][1])");
+}
+
+##########################################################################
+
+bundle agent check_update(user,password) {
+
+vars:
+  aix::
+    "secpass" string  => execresult("/usr/local/bin/cfpasswd $(user)","useshell"),
+               policy => "overridable";
+
+classes:
+
+  "updatepass"  not => strcmp("$(password)","$(secpass)");
+
+commands:
+
+  updatepass::
+
+    "/usr/bin/echo"
+        args    => "$(user):$(password) | /usr/bin/chpasswd -c -e -R compat",
+        contain => standard;
+
