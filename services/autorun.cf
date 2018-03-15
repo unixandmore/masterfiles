@@ -1,0 +1,20 @@
+body file control
+{
+      inputs => { @(services_autorun.found_inputs) };
+}
+
+bundle agent autorun
+{
+meta:
+  "tags" slist => { "autorun" };
+
+  vars:
+       services_autorun::
+      "bundles" slist => bundlesmatching(".*", "autorun");
+      "bundles" slist => bundlesmatching(".*", "autorun");
+methods:
+  "autorun"    usebundle => "$(bundles)";
+
+}
+
+

@@ -5,15 +5,13 @@ meta:
 
 vars:
  aix::
-  "aixadmin_groups" data => parsejson('
-  {
+  "aixadmin_groups" data => parsejson('{
    "aixadmin": { "gid": 1000 },
-  }, meta => { "glidm", "aixadmingroups" }, policy => "free";
+  }'), meta => { "glidm", "aixadmingroups" }, policy => "free";
   
-  "aixadmin_users" data => parsejson('
-  {
+  "aixadmin_users" data => parsejson('{
    "rcox": { "uid": "1000", "gecos": "Administrative account for Raymond Cox", "home": "/home/rcox", "pgrp": "aixadmin", "grps": ["aixadmin"] },
-  }, meta => { "ulidm", "aixadminusers" }, policy => "free";
+  }'), meta => { "ulidm", "aixadminusers" }, policy => "free";
 
  
  "groups" slist => variablesmatching(".*","aixadmingroups");
@@ -55,7 +53,7 @@ classes:
 
 commands:
  aix::
-  "/usr/bin/mkgroup"  args => "id = $(gidx) $(groups[$(gidx)][gid])", ifvarclass => "add_$(gidx)";
+  "/usr/bin/mkgroup"  args => "id=$(groups[$(gidx)][gid]) $(gidx)", ifvarclass => "add_$(gidx)";
 }
 
 bundle agent lidm_user_add(userlist)
@@ -68,24 +66,21 @@ vars:
   
 classes:
  aix::
-  "add_$(uidx)" not => userexitst("$(uidx)");
+  "add_$(uidx)" not => userexists("$(uidx)");
   "$(uidx)_exists" expression => userexists("$(uidx)");
 
 commands:
  aix::
     "/usr/bin/mkuser"
         args     => "-a id=$(users[$(uidx)][uid]) pgrp=$(users[$(uidx)][pgrp]) gecos=\'$(users[$(uidx)][gecos])\' home=$(users[$(uidx)][home])  $(uidx)",
-        contain  => standard,
         ifvarclass => "add_$(index)";
 
     "/usr/bin/echo"
         args    => "$(uidx):inth3mud | /usr/bin/chpasswd",
-        contain => standard,
         ifvarclass => "add_$(uidx)";
 
     "/usr/bin/pwdadm"
         args    => "-c $(uidx)",
-        contain => standard,
         ifvarclass => "add_$(uidx)";
 
 }
