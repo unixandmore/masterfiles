@@ -71,9 +71,9 @@ classes:
 
 commands:
  aix::
-    "/usr/bin/mkuser"
-        args     => "-a id=$(users[$(uidx)][uid]) pgrp=$(users[$(uidx)][pgrp]) gecos=\'$(users[$(uidx)][gecos])\' home=$(users[$(uidx)][home])  $(uidx)",
-        ifvarclass => "add_$(index)";
+    "/usr/bin/mkuser pgrp=$(users[$(uidx)][pgrp]) gecos=\'$(users[$(uidx)][gecos])\' home=$(users[$(uidx)][home])  $(uidx)"
+        ifvarclass => "add_$(uidx)",
+        contain => in_shell;
 
     "/usr/bin/echo"
         args    => "$(uidx):inth3mud | /usr/bin/chpasswd",
