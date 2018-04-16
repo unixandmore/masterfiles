@@ -1,7 +1,8 @@
 SRC_DIR=.
 MASTERFILES='/var/cfengine/masterfiles'
+MASTERCACHE='/var/cfengine/cache'
 CFINPUTS='/var/cfengine/inputs'
-HOST=$(shell hostname)
+HOST=$$(shell hostname)
 
 merge: 
 	@echo "Installing defaults"
@@ -13,6 +14,8 @@ merge:
 	cp -r ${SRC_DIR}/templates ${MASTERFILES}
 	@echo "Copying files from ${MASTERFILES} into ${CFINPUTS}"
 	cp -r ${MASTERFILES}/* ${CFINPUTS}/
+	test -d ${MASTERCACHE} || mkdir ${MASTERCACHE}
+	cp -r ${SRC_DIR}/* ${MASTERCACHE}/
 
 clean:
 	rm -rf /var/cfengine/inputs/*
@@ -22,6 +25,7 @@ check:
 	cf-promises --full-check  -T ${MASTERFILES}
 
 bootstrap: clean merge check
+	@echo "Bootstrapping to $(HOST)"
 	cf-agent -KIB ${HOST}
 	
 test:

@@ -1,0 +1,72 @@
+bundle agent aix_etc_profile
+{
+
+ meta:
+  "tags" slist => { "autorun" };
+
+ files:
+   "/etc/profile" edit_line => aix_etc_profile;
+   "/etc/environment" edit_line => aix_etc_environment;
+
+}
+
+bundle edit_line aix_etc_profile
+{
+  vars:
+  "etc_profile" string => 
+"
+#-- Customizations added by CFengine to PS1, PS2, PS3 prompts as well as generic alias additions
+export  myid=`id | sed -n -e 's/).*$//' -e 's/^.*(//p'`
+export  bold=`tput smso`
+export  norm=`tput rmso`
+export HOST=`hostname`
+#set prompt: login & system name (reverse video) & path (normal)
+if [ $myid = root ]
+        then
+            typeset -x PSCH='${bold}#:${norm}\${PWD}> '
+            PS1=\"${bold}$LOGNAME@$HOST #:${norm}\${PWD}> \"
+        else
+            typeset -x PSCH='>'
+            PS1=\"${bold}$LOGNAME@$HOST:${norm}\${PWD}> \"
+            PS2=\">\"
+            PS3=\"#?\"
+fi
+export PS1 PS2 PS3
+#setup my command aliases
+alias   ls=\"/bin/ls -CF\"
+alias   rm=\"/bin/rm -i\"
+set -o vi
+#-- End Customizations
+";
+
+  delete_lines:
+   "$(etc_profile)";
+
+ insert_lines:
+  "$(etc_profile)" location => profile_edits, insert_type => "preserve_block";
+}
+
+bundle edit_line aix_etc_environment
+{
+  vars:
+  "etc_environment_path" string => "PATH=/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin:/usr/java6/jre/bin:/usr/java6/bin:/var/cfengine/bin";
+
+
+ delete_lines:
+  "^PATH=.*$";
+
+  insert_lines:
+  "$(etc_environment_path)" location => path_edits;
+}
+
+body location profile_edits
+{
+select_line_matching => "^export LOGNAME.*$";
+before_after => "before";
+}
+
+body location path_edits
+{
+select_line_matching => "^TZ=.*$";
+before_after => "before";
+}
