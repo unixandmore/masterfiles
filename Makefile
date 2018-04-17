@@ -15,7 +15,7 @@ merge:
 	@echo "Copying files from ${MASTERFILES} into ${CFINPUTS}"
 	cp -r ${MASTERFILES}/* ${CFINPUTS}/
 	test -d ${MASTERCACHE} || mkdir ${MASTERCACHE}
-	cp -r ${SRC_DIR}/* ${MASTERCACHE}/
+	cp -r ${SRC_DIR}/cache/* ${MASTERCACHE}/
 
 clean:
 	rm -rf /var/cfengine/inputs/*
