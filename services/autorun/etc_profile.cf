@@ -5,6 +5,7 @@ bundle agent aix_etc_profile
   "tags" slist => { "autorun" };
 
  files:
+  aix::
    "/etc/profile" edit_line => aix_etc_profile;
    "/etc/environment" edit_line => aix_etc_environment;
 
