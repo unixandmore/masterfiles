@@ -5,10 +5,6 @@ CFINPUTS='/var/cfengine/inputs'
 HOST=$$(shell hostname)
 
 merge: 
-	@echo "Installing defaults"
-	cp -r ${SRC_DIR}/def.json ${MASTERFILES}/def.json
-	@echo "Installing custom promises file"
-	cp -r ${SRC_DIR}/promises.cf ${MASTERFILES}/promises.cf
 	@echo "Installing all custom bundles and templates"
 	cp -r ${SRC_DIR}/services ${MASTERFILES}
 	cp -r ${SRC_DIR}/templates ${MASTERFILES}
